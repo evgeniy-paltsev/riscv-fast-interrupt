@@ -250,24 +250,21 @@ Of the main ACLIC goals, these targets are addressed here:
   * Maximize compatibility with AIA
 
 To achieve this, ACLIC builds upon the Advanced Platform Level Interrupt Controller (APLIC).
-The ACLIC is a tailored APLIC, optimized for resource efficiency, directly integrated with one hart.
+The ACLIC is a tailored APLIC, optimized for resource efficiency and tightly integrated with a single hart. It utilizes APLIC direct delivery mode.
 
 === Interface
 
-ACLIC implements subset of AIA APLIC configuration and control interface and allows maximum of two domains for Machine and
-Supervisor modes respectively. Each domain may include:
-• 1 domain configuration register.
-• Up to 1023 source configuration registers.
-• 4 interrupt pending and enable control registers.
-• 4 interrupt delivery control registers.
+ACLIC implements subset of AIA APLIC configuration and control interface defined by RISC-V AIA.
+ACLIC allows maximum of two domains for Machine and Supervisor modes respectively. Each domain may include:
 
-=== External Interrupt Configuration Registers
+- 1 domain configuration register.
+- Up to 1023 source configuration registers.
+- 4 interrupt pending and enable control registers.
+- 4 interrupt delivery control registers.
 
-ACLIC inherits valuable subset of the external interrupt configuration interface defined by RISC-V
-AIA for Advanced Platform Level Interrupt Controller (APLIC).
+All the MMIO-mapped registers keep the same address offsets as in APLIC. No new registers were added.
 
-NOTE: Entire ACLIC interface is optimized for access by interrupt identity number (IID) to
-avoid unnecessary calculation of the bit positions.
+NOTE: Entire ACLIC interface is optimized for access by interrupt identity number (IID) to avoid unnecessary calculation of fields positions for the specific interrupt.
 
 ==== Interrupt Domain Configuration (domaincfg)
 
@@ -275,29 +272,41 @@ avoid unnecessary calculation of the bit positions.
 |===
 | Field |  Position |  Access |  Description
 | IE    |  8        |  RW     |  Domain wide interrupt-enable
-| DM    |  3:2      |  RW     |  Delivery Mode (*WARL*)
+| DM    |  2        |  RO     |  Delivery Mode (fixed to `direct delivery`)
 |===
 
-New APLIC delivery mode is defined in domaincfg.DM field:
+Rest of the optional bits are implemented as read-only zeros.
 
-[%autowidth,float="center",cols=">,<",grid=none,frame=none]
-|===
-|0 = |direct delivery mode 
-|1 = |MSI delivery mode
-|2 = |ACLIC delivery mode (new)
-|===
+// New APLIC delivery mode is defined in domaincfg.DM field:
+
+// [%autowidth,float="center",cols=">,<",grid=none,frame=none]
+// |===
+// |0 = |direct delivery mode 
+// |1 = |MSI delivery mode
+// |2 = |ACLIC delivery mode (new)
+// |===
 
 ==== Interrupt Source Configuration (sourcecfgK)
 
-Each implemented ACLIC interrupt has dedicated source configuration register which integrates
-all parameters dedicated to this interrupt. The layout of the interrupt source configuration register
-depends on value of delegation flag `D`, which is accessible in Machine domain configuration and is
-always read-only zero in Supervisor domain configuration (assuming S-mode domain has no child).
+Each implemented ACLIC interrupt has dedicated source configuration register which integrates all parameters dedicated to this interrupt.
+
+The register layout depends on value of delegation flag `D`, which is accessible in M-domain configuration and is
+always read-only zero in S-domain configuration (assuming S-domain has no children).
+
+sourcecfgK format when interrupt source is delegated to a child domain:
+
+[%autowidth]
+|===
+| Field           |  Position |  Access |  Description
+| D = 1           |  10       |  RW     |  M-domain interrupt source delegation is enabled
+| Child Index = 0 |  9:0      |  RO     |  Read-only zero (as M-domain has only one child)
+|===
+
+sourcecfgK format when interrupt source is not delegated to a child domain:
 
 [%autowidth]
 |===
 | Field |  Position |  Access |  Description
- 4+^| `sourcecfgK.D = 0`
 | IE    |  31       |  RO     |  Read-only interrupt-enable
 | IP    |  30       |  RO     |  Read-only (rectified) interrupt-pending
 | IPRIO |  23:16    |  RW     |  Interrupt priority
@@ -305,68 +314,51 @@ always read-only zero in Supervisor domain configuration (assuming S-mode domain
 | SM    |  2:0      |  RW     |  Source mode
 |===
 
-To reduce registers addresses reservation the PRIO filed is moved from APLIC targetK[1..1023] registers.
-
 The IE and IP fields are specific to ACLIC (reserved in case of APLIC) and provide read-only view
-of the interrupt-pending and interrupt-enable bits replacing the pending and enable arrays
-used by APLIC.
+of the interrupt-pending and interrupt-enable bits replacing the pending and enable arrays used by APLIC.
 
-If delegation is enabled for the interrupt source K (sourcecfgK.D = 1, accessible only via M-domain
-interface), then remaining fields of the sourcecfgK are read-only zeros in M-domain and have
-extended layout in S-domain.
+To reduce registers addresses reservation the IPRIO field is moved from APLIC targetK[1..1023] registers.
+// target - Active source, direct delivery mode
 
-[%autowidth]
-|===
-| Field |  Position |  Access |  Description
- 4+^| `sourcecfgK.D = 1`
-| D = 1 |  10       |  RW     |  Machine domain interrupt source delegation is enabled
-|===
-
-NOTE: As the sourcecfgK.D is invisible in Supervisor domain, the effective value of the non-delegated source configuration is read-only zero.
+// NOTE: As the sourcecfgK.D is invisible in S-domain, the effective value of the non-delegated source configuration is read-only zero.
 
 ==== Interrupt-Enable and Interrupt-Pending Control Registers
 
-ACLIC implements subset of interrupt-pending and interrupt-enable control interface defined by RISC-V AIA for APLIC. In addition to set bit and clear bit by number there is read-only interrupt pending and interrupt-enable bits mirrored in the sourcecfgK source configuration register.
+// TODO: drop offset, access. Add note that these are existing registers in APLIC
+
+ACLIC implements subset of interrupt-pending and interrupt-enable APLIC control interface. In addition to set / clear bit by number there are read-only interrupt pending and interrupt-enable bits mirrored in the sourcecfgK register.
 
 [%autowidth]
 |===
-| Offset    |  Register name |  Access |  Description
-| 0x1000    |  setipnum      |  RW     |  Set interrupt-pending by number
-| 0x1001    |  clripnum      |  RW     |  Clear interrupt-pending by number
-| 0x1002    |  setienum      |  RW     |  Set interrupt-enable by number
-| 0x1003    |  clrienum      |  RW     |  Clear interrupt-enable by number
+|  Register name |  Access |  Description
+|  setipnum      |  RW     |  Set interrupt-pending by number
+|  clripnum      |  RW     |  Clear interrupt-pending by number
+|  setienum      |  RW     |  Set interrupt-enable by number
+|  clrienum      |  RW     |  Clear interrupt-enable by number
 |===
 
-NOTE: Entire ACLIC interface is optimized for access by interrupt identity number (IID) to
+NOTE: Interface is optimized for access by interrupt identity number (IID) to
 avoid unnecessary calculation of the bit positions. Hardware implementation is also
-simplified as there is no need to construct APLIC-like pending/enable 32-bit values based
+simplified as there is no need to construct 32-bit pending/enable values based
 on per-interrupt delegation configuration.
+
+===== Incoming MSI Support
+
+Similar as in APLIC, setipnum register may be used as a write (incoming) port for MSIs.
 
 ==== Interrupt Delivery Control Registers
 
-Like the APLIC in direct delivery mode, ACLIC provides the interrupt delivery control (IDC)
+Similar to the APLIC in direct delivery mode, ACLIC provides the interrupt delivery control (IDC)
 registers structure to control the interrupt handling.
 
 [%autowidth]
 |===
-| Offset    |  Register name |  Access |  Description
-| 0x1004    |  idelivery     |  RW     |  External interrupt delivery enable
-| 0x1006    |  ithreshold    |  RW     |  External interrupt threshold
-| 0x1007    |  topi          |  RO     |  Top priority external interrupt information
-| 0x1008    |  claimi        |  RW     |  Top priority external interrupt claim
+|  Register name |  Access |  Description
+|  idelivery     |  RW     |  External interrupt delivery enable
+|  ithreshold    |  RW     |  External interrupt threshold
+|  topi          |  RO     |  Top priority external interrupt information
+|  claimi        |  RW     |  Top priority external interrupt claim
 |===
-
-=== State Enable
-
-If the Smstateen extension is implemented,
-then the bit ?? in mstateen0 is implemented.
-If bit ?? of a controlling mstateen0 CSR is zero,
-then access to the ACLIC CSRs by S-mode or a lower privilege mode
-results in an illegal instruction exception,
-except if the hypervisor extension is implemented,
-and the conditions for a virtual instruction exception apply,
-in which case a virtual instruction exception is raised
-when in VS or VU mode instead of an illegal instruction exception.
 
 == Conditional Stack Pointer Swap extension (Smcsps, Sscsps)
 
