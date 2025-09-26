@@ -249,7 +249,7 @@ Of the main ACLIC goals, these targets are addressed here:
   * Low area overhead
   * Maximize compatibility with AIA
 
-To achieve this, ACLIC builds upon the Advanced Platform Level Interrupt Controller (APLIC).
+To achieve this, ACLIC builds upon the Advanced Platform-Level Interrupt Controller (APLIC).
 The ACLIC is a tailored APLIC, optimized for resource efficiency and tightly integrated with a single hart. It utilizes APLIC direct delivery mode.
 
 === Interface
@@ -276,15 +276,6 @@ NOTE: Entire ACLIC interface is optimized for access by interrupt identity numbe
 |===
 
 Rest of the optional bits are implemented as read-only zeros.
-
-// New APLIC delivery mode is defined in domaincfg.DM field:
-
-// [%autowidth,float="center",cols=">,<",grid=none,frame=none]
-// |===
-// |0 = |direct delivery mode 
-// |1 = |MSI delivery mode
-// |2 = |ACLIC delivery mode (new)
-// |===
 
 ==== Interrupt Source Configuration (sourcecfgK)
 
@@ -318,15 +309,14 @@ The IE and IP fields are specific to ACLIC (reserved in case of APLIC) and provi
 of the interrupt-pending and interrupt-enable bits replacing the pending and enable arrays used by APLIC.
 
 To reduce registers addresses reservation the IPRIO field is moved from APLIC targetK[1..1023] registers.
-// target - Active source, direct delivery mode
 
-// NOTE: As the sourcecfgK.D is invisible in S-domain, the effective value of the non-delegated source configuration is read-only zero.
+The effective value of the non-delegated source configuration in S-domain is read-only zero.
 
 ==== Interrupt-Enable and Interrupt-Pending Control Registers
 
-// TODO: drop offset, access. Add note that these are existing registers in APLIC
+// TODO: drop access. Add note that these are existing registers in APLIC
 
-ACLIC implements subset of interrupt-pending and interrupt-enable APLIC control interface. In addition to set / clear bit by number there are read-only interrupt pending and interrupt-enable bits mirrored in the sourcecfgK register.
+ACLIC implements subset of interrupt-pending and interrupt-enable APLIC control interface. In addition to set / clear bit by number there are read-only interrupt-pending and interrupt-enable bits mirrored in the sourcecfgK register.
 
 [%autowidth]
 |===
